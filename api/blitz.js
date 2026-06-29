@@ -27,17 +27,6 @@ export default async function handler(req, res) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  const makeHash = async (seed) => {
-    const buf = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(seed)
-    );
-    return Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-      .slice(0, 16);
-  };
-
   try {
     const liveRes = await fetch("https://ukwx.duckdns.org/lightning/europe", {
       headers: { "User-Agent": "lightning-api" },
@@ -47,33 +36,13 @@ export default async function handler(req, res) {
     const liveData = await liveRes.json();
 
     const nowSec = Math.floor(Date.now() / 1000);
-    const cutoff = nowSec - 60 * 60; // letzte 60 Minuten
+    const cutoff = nowSec - 60 * 60;
 
     const count = (liveData.points ?? []).filter(
-      (p) =>
-        p.t >= cutoff &&
-        haversine(latNum, lonNum, p.lat, p.lon) <= RADIUS
+      (p) => p.t >= cutoff && haversine(latNum, lonNum, p.lat, p.lon) <= RADIUS
     ).length;
 
-    const active = count > 0;
-
-    if (!active) {
-      return res.status(200).json({ active: false });
-    }
-
-    // Hash stabil für 1h pro Standort
-    const now = new Date();
-    const hourStamp = `${now.getUTCFullYear()}${String(now.getUTCMonth()+1).padStart(2,"0")}${String(now.getUTCDate()).padStart(2,"0")}${String(now.getUTCHours()).padStart(2,"0")}`;
-    const seed = `${latNum}:${lonNum}:${hourStamp}`;
-    const hash = await makeHash(seed);
-
-    const timestamp = now.toLocaleString("de-DE", {
-      timeZone: "Europe/Berlin",
-      day: "2-digit", month: "2-digit", year: "numeric",
-      hour: "2-digit", minute: "2-digit"
-    }) + " Uhr";
-
-    return res.status(200).json({ active: true, hash, timestamp });
+    return res.status(200).json({ active: count > 0 });
 
   } catch (err) {
     return res.status(502).json({ error: err.message });
