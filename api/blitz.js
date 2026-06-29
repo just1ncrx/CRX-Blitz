@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     const liveData = await liveRes.json();
 
     const nowSec = Math.floor(Date.now() / 1000);
-    const cutoff = nowSec - 60 * 60;
+    const cutoff = nowSec - 60 * 30;
 
     const count = (liveData.points ?? []).filter(
       (p) => p.t >= cutoff && haversine(latNum, lonNum, p.lat, p.lon) <= RADIUS
