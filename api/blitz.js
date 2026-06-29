@@ -12,9 +12,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "lat und lon sind erforderlich" });
   }
 
-  const latNum   = parseFloat(lat);
-  const lonNum   = parseFloat(lon);
-  const RADIUS   = 20; // km, fest
+  const latNum = parseFloat(lat);
+  const lonNum = parseFloat(lon);
+  const RADIUS = 20;
 
   const haversine = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
@@ -27,21 +27,15 @@ export default async function handler(req, res) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  // Einfacher Hash: SHA-256 über "timestamp:count" → hex-Prefix
-  const makeId = async (count) => {
-    const now = Date.now();
-    const raw = `${now}:${count}`;
+  const makeHash = async (seed) => {
     const buf = await crypto.subtle.digest(
       "SHA-256",
-      new TextEncoder().encode(raw)
+      new TextEncoder().encode(seed)
     );
-    const hex = Array.from(new Uint8Array(buf))
+    return Array.from(new Uint8Array(buf))
       .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    // Format: YYYYMMDD-HHmmss-<8 hex chars>
-    const d = new Date(now);
-    const ts = `${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,"0")}${String(d.getUTCDate()).padStart(2,"0")}-${String(d.getUTCHours()).padStart(2,"0")}${String(d.getUTCMinutes()).padStart(2,"0")}${String(d.getUTCSeconds()).padStart(2,"0")}`;
-    return `${ts}-${hex.slice(0, 8)}`;
+      .join("")
+      .slice(0, 16);
   };
 
   try {
@@ -57,9 +51,24 @@ export default async function handler(req, res) {
     ).length;
 
     const active = count > 0;
-    const id     = await makeId(count);
 
-    return res.status(200).json({ active, id });
+    if (!active) {
+      return res.status(200).json({ active: false });
+    }
+
+    // Hash-Seed: lat+lon+Stunde → stabil für 1h, dann neue Warnung
+    const now = new Date();
+    const hourStamp = `${now.getUTCFullYear()}${String(now.getUTCMonth()+1).padStart(2,"0")}${String(now.getUTCDate()).padStart(2,"0")}${String(now.getUTCHours()).padStart(2,"0")}`;
+    const seed = `${latNum}:${lonNum}:${hourStamp}`;
+    const hash = await makeHash(seed);
+
+    const timestamp = now.toLocaleString("de-DE", {
+      timeZone: "Europe/Berlin",
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    }) + " Uhr";
+
+    return res.status(200).json({ active: true, hash, timestamp });
 
   } catch (err) {
     return res.status(502).json({ error: err.message });
