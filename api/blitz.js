@@ -46,8 +46,13 @@ export default async function handler(req, res) {
     if (!liveRes.ok) throw new Error(`HTTP ${liveRes.status}`);
     const liveData = await liveRes.json();
 
+    const nowSec = Math.floor(Date.now() / 1000);
+    const cutoff = nowSec - 60 * 60; // letzte 60 Minuten
+
     const count = (liveData.points ?? []).filter(
-      (p) => haversine(latNum, lonNum, p.lat, p.lon) <= RADIUS
+      (p) =>
+        p.t >= cutoff &&
+        haversine(latNum, lonNum, p.lat, p.lon) <= RADIUS
     ).length;
 
     const active = count > 0;
@@ -56,7 +61,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ active: false });
     }
 
-    // Hash-Seed: lat+lon+Stunde → stabil für 1h, dann neue Warnung
+    // Hash stabil für 1h pro Standort
     const now = new Date();
     const hourStamp = `${now.getUTCFullYear()}${String(now.getUTCMonth()+1).padStart(2,"0")}${String(now.getUTCDate()).padStart(2,"0")}${String(now.getUTCHours()).padStart(2,"0")}`;
     const seed = `${latNum}:${lonNum}:${hourStamp}`;
