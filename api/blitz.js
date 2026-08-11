@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   const latNum = parseFloat(lat);
   const lonNum = parseFloat(lon);
   const RADIUS = 20;
-  const LOOKBACK_MIN = 30;
+  const LOOKBACK_MIN = 60;
 
   const haversine = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
