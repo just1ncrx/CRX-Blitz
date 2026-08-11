@@ -56,6 +56,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ 
       active: nearbyStrikes.length > 0,
       count: nearbyStrikes.length,
+      radius_km: RADIUS,
+      lookback_min: LOOKBACK_MIN,
+      latest_archive: latestTimestamp,
     });
 
   } catch (err) {
