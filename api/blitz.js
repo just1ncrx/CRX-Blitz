@@ -1,7 +1,3 @@
-// api/lightning.js
-// Abruf: /api/lightning?lat=48.5&lon=8.4
-// Prüft ob in den letzten 30 Min Blitze im 20km Radius waren
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
@@ -16,7 +12,7 @@ export default async function handler(req, res) {
 
   const latNum = parseFloat(lat);
   const lonNum = parseFloat(lon);
-  const RADIUS = 20; // km
+  const RADIUS = 20;
   const LOOKBACK_MIN = 30;
 
   const haversine = (lat1, lon1, lat2, lon2) => {
@@ -32,46 +28,34 @@ export default async function handler(req, res) {
 
   try {
     const nowMs = Date.now();
-    const cutoffMs = nowMs - LOOKBACK_MIN * 60 * 1000; // letzte 30 Min
+    const cutoffMs = nowMs - LOOKBACK_MIN * 60 * 1000;
 
-    // Schritt 1: index.json abrufen
+    // Index schnell laden (5s timeout OK)
     const indexRes = await fetch("https://radar.wetterstation-neustadt.de/index.json", {
-      headers: { "User-Agent": "lightning-api" },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(5000),
     });
-    if (!indexRes.ok) throw new Error(`HTTP ${indexRes.status} vom Index`);
+    if (!indexRes.ok) throw new Error(`HTTP ${indexRes.status}`);
 
     const indexData = await indexRes.json();
-    const timestamps = indexData.timestamps ?? [];
-    if (timestamps.length === 0) throw new Error("Keine Timestamps");
+    const latestTimestamp = indexData.timestamps?.[0];
+    if (!latestTimestamp) throw new Error("Keine Timestamps");
 
-    // Schritt 2: Neuestes Timestamp
-    const latestTimestamp = timestamps[0];
-
-    // Schritt 3: Archive abrufen
-    const archiveUrl = `https://radar.wetterstation-neustadt.de/blitze/archive/${latestTimestamp}.json`;
-    const archiveRes = await fetch(archiveUrl, {
-      headers: { "User-Agent": "lightning-api" },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!archiveRes.ok) throw new Error(`HTTP ${archiveRes.status} vom Archive`);
+    // Archive ohne Timeout laden (kann länger dauern)
+    const archiveRes = await fetch(
+      `https://radar.wetterstation-neustadt.de/blitze/archive/${latestTimestamp}.json`
+    );
+    if (!archiveRes.ok) throw new Error(`HTTP ${archiveRes.status}`);
 
     const archiveData = await archiveRes.json();
     const allStrikes = archiveData.strikes ?? [];
 
-    // Schritt 4: Nach Radius und Zeit filtern
-    const nearbyStrikes = allStrikes.filter((p) => {
-      const isNearby = haversine(latNum, lonNum, p.lat, p.lon) <= RADIUS;
-      const isRecent = p.t >= cutoffMs;
-      return isNearby && isRecent;
-    });
+    const nearbyStrikes = allStrikes.filter((p) => 
+      p.t >= cutoffMs && haversine(latNum, lonNum, p.lat, p.lon) <= RADIUS
+    );
 
     return res.status(200).json({ 
       active: nearbyStrikes.length > 0,
       count: nearbyStrikes.length,
-      radius_km: RADIUS,
-      lookback_min: LOOKBACK_MIN,
-      latest_archive: latestTimestamp
     });
 
   } catch (err) {
